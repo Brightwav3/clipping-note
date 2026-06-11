@@ -1,0 +1,9 @@
+{
+	"id": "clipping-note",
+	"name": "Clipping Note",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.3",
+	"description": "Vytvoří novou Clipping poznámku do složky Clippings podle šablony, jedním kliknutím z postranního panelu.",
+	"author": "Sajmon",
+	"isDesktopOnly": false
+}
