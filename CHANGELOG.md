@@ -8,3 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Initial release.
+- One-click Clipping note creation from the ribbon and the command palette.
+- Template support with `{{title}}`, `{{date}}`, `{{date:FORMAT}}`, `{{time}}`
+  and `{{time:FORMAT}}` placeholders.
+- English interface by default, with an optional Czech localization toggle in
+  the settings.

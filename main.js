@@ -5,45 +5,94 @@ const obsidian = require('obsidian');
 /**
  * Clipping Note
  *
- * Chová se stejně jako jádrové pluginy Daily Note a Unique Note (zk-prefixer):
- *  - přidá ikonku do postranního panelu (ribbon)
- *  - po kliknutí vytvoří soubor .md ve složce "Clippings"
- *  - jméno souboru: "Clipping " + datum/čas ve formátu D. M. Y HH-mm
- *    (např. "Clipping 10. 6. 2026 21-04")
- *  - obsah se naplní ze šablony -Template/Clipping Template
- *    a zpracují se zástupné výrazy {{date}}, {{date:FORMAT}},
- *    {{time}}, {{time:FORMAT}} a {{title}} — stejně jako u jádrových pluginů.
+ * Works like the core Daily Note and Unique Note (zk-prefixer) plugins:
+ *  - adds an icon to the sidebar ribbon
+ *  - on click, creates a .md file in the "Clippings" folder
+ *  - filename: "Clipping " + date/time formatted as D. M. Y HH-mm
+ *    (e.g. "Clipping 10. 6. 2026 21-04")
+ *  - the body is filled from the -Template/Clipping Template template,
+ *    processing the {{date}}, {{date:FORMAT}}, {{time}}, {{time:FORMAT}}
+ *    and {{title}} placeholders — just like the core plugins.
+ *
+ * The interface is in English by default; Czech localization can be
+ * enabled in Settings → Clipping Note.
  */
 
-// Výchozí nastavení – jde upravit v Nastavení → Clipping Note.
+// UI strings. Ribbon and command labels are read once on load, so changing
+// the language takes effect for them only after Obsidian is reloaded.
+const TRANSLATIONS = {
+	en: {
+		ribbonTooltip: 'Create Clipping note',
+		commandName: 'Create Clipping note',
+		createFailed: (msg) => `Clipping Note: could not create the note – ${msg}`,
+		templateMissing: (path) => `Clipping Note: template "${path}" not found, creating an empty note.`,
+		folderName: 'Target folder',
+		folderDesc: 'Where new Clipping notes are saved.',
+		templateName: 'Template',
+		templateDesc: 'Path to the template file (without the .md extension).',
+		formatName: 'Filename format (date/time)',
+		formatDesc: 'moment.js format used after the prefix. Replace the colon in the time with a hyphen.',
+		prefixName: 'Filename prefix',
+		prefixDesc: 'Text before the date in the filename.',
+		languageName: 'Czech localization',
+		languageDesc: 'Switch the interface to Czech. Ribbon and command labels update after reloading Obsidian.',
+	},
+	cs: {
+		ribbonTooltip: 'Vytvořit Clipping poznámku',
+		commandName: 'Vytvořit Clipping poznámku',
+		createFailed: (msg) => `Clipping Note: nepodařilo se vytvořit poznámku – ${msg}`,
+		templateMissing: (path) => `Clipping Note: šablona "${path}" nenalezena, vytvářím prázdnou poznámku.`,
+		folderName: 'Cílová složka',
+		folderDesc: 'Kam se ukládají nové Clipping poznámky.',
+		templateName: 'Šablona',
+		templateDesc: 'Cesta k souboru šablony (bez přípony .md).',
+		formatName: 'Formát názvu (datum/čas)',
+		formatDesc: 'Formát moment.js použitý za prefixem. Dvojtečku v čase nahraď pomlčkou.',
+		prefixName: 'Prefix názvu',
+		prefixDesc: 'Text před datem v názvu souboru.',
+		languageName: 'Česká lokalizace',
+		languageDesc: 'Přepne rozhraní do češtiny. Popisky v panelu a paletě se aktualizují po restartu Obsidianu.',
+	},
+};
+
+// Default settings – editable in Settings → Clipping Note.
 const DEFAULT_SETTINGS = {
 	folder: 'Clippings',
 	template: '-Template/Clipping Template',
-	// Formát data/času v názvu souboru (moment.js). HH-mm místo HH:mm,
-	// protože dvojtečka není v názvech souborů povolená.
+	// Date/time format in the filename (moment.js). HH-mm instead of HH:mm,
+	// because a colon is not allowed in filenames.
 	format: 'D. M. Y HH-mm',
 	prefix: 'Clipping ',
+	// Interface language: 'en' (default) or 'cs'.
+	language: 'en',
 };
 
 class ClippingNotePlugin extends obsidian.Plugin {
 	async onload() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
-		// Ikonka v postranním panelu (ribbon).
-		this.addRibbonIcon('scissors', 'Vytvořit Clipping poznámku', async () => {
+		// Sidebar ribbon icon.
+		this.addRibbonIcon('scissors', this.t('ribbonTooltip'), async () => {
 			await this.createClippingNote();
 		});
 
-		// Příkaz do command palette (Ctrl/Cmd+P).
+		// Command palette entry (Ctrl/Cmd+P).
 		this.addCommand({
 			id: 'create-clipping-note',
-			name: 'Vytvořit Clipping poznámku',
+			name: this.t('commandName'),
 			callback: async () => {
 				await this.createClippingNote();
 			},
 		});
 
 		this.addSettingTab(new ClippingNoteSettingTab(this.app, this));
+	}
+
+	// Returns a localized string; if the entry is a function, call it with args.
+	t(key, ...args) {
+		const lang = TRANSLATIONS[this.settings.language] ? this.settings.language : 'en';
+		const value = TRANSLATIONS[lang][key];
+		return typeof value === 'function' ? value(...args) : value;
 	}
 
 	async saveSettings() {
@@ -63,12 +112,12 @@ class ClippingNotePlugin extends obsidian.Plugin {
 
 			const file = await this.app.vault.create(filePath, content);
 
-			// Otevři novou poznámku v aktivním panelu.
+			// Open the new note in the active pane.
 			const leaf = this.app.workspace.getLeaf(false);
 			await leaf.openFile(file);
 		} catch (err) {
 			console.error('Clipping Note:', err);
-			new obsidian.Notice('Clipping Note: nepodařilo se vytvořit poznámku – ' + err.message);
+			new obsidian.Notice(this.t('createFailed', err.message));
 		}
 	}
 
@@ -80,7 +129,7 @@ class ClippingNotePlugin extends obsidian.Plugin {
 		}
 	}
 
-	// Vrátí volnou cestu; pokud soubor existuje, přidá " 1", " 2", ...
+	// Returns a free path; if the file already exists, appends " 1", " 2", ...
 	async getAvailablePath(folderPath, baseName) {
 		const join = (name) => normalizePath(folderPath ? `${folderPath}/${name}` : name) + '.md';
 		let candidate = join(baseName);
@@ -100,13 +149,13 @@ class ClippingNotePlugin extends obsidian.Plugin {
 		if (templateFile instanceof obsidian.TFile) {
 			raw = await this.app.vault.read(templateFile);
 		} else if (this.settings.template) {
-			new obsidian.Notice(`Clipping Note: šablona "${templatePath}" nenalezena, vytvářím prázdnou poznámku.`);
+			new obsidian.Notice(this.t('templateMissing', templatePath));
 		}
 
 		return this.applyTemplate(raw, title);
 	}
 
-	// Zpracuje zástupné výrazy stejně jako jádrové pluginy Obsidianu.
+	// Processes placeholders the same way as Obsidian's core plugins.
 	applyTemplate(text, title) {
 		const now = obsidian.moment();
 
@@ -127,11 +176,12 @@ class ClippingNoteSettingTab extends obsidian.PluginSettingTab {
 
 	display() {
 		const { containerEl } = this;
+		const t = (key, ...args) => this.plugin.t(key, ...args);
 		containerEl.empty();
 
 		new obsidian.Setting(containerEl)
-			.setName('Cílová složka')
-			.setDesc('Kam se ukládají nové Clipping poznámky.')
+			.setName(t('folderName'))
+			.setDesc(t('folderDesc'))
 			.addText((text) =>
 				text
 					.setPlaceholder('Clippings')
@@ -143,8 +193,8 @@ class ClippingNoteSettingTab extends obsidian.PluginSettingTab {
 			);
 
 		new obsidian.Setting(containerEl)
-			.setName('Šablona')
-			.setDesc('Cesta k souboru šablony (bez přípony .md).')
+			.setName(t('templateName'))
+			.setDesc(t('templateDesc'))
 			.addText((text) =>
 				text
 					.setPlaceholder('-Template/Clipping Template')
@@ -156,8 +206,8 @@ class ClippingNoteSettingTab extends obsidian.PluginSettingTab {
 			);
 
 		new obsidian.Setting(containerEl)
-			.setName('Formát názvu (datum/čas)')
-			.setDesc('Formát moment.js použitý za prefixem. Dvojtečku v čase nahraď pomlčkou.')
+			.setName(t('formatName'))
+			.setDesc(t('formatDesc'))
 			.addText((text) =>
 				text
 					.setPlaceholder('D. M. Y HH-mm')
@@ -169,8 +219,8 @@ class ClippingNoteSettingTab extends obsidian.PluginSettingTab {
 			);
 
 		new obsidian.Setting(containerEl)
-			.setName('Prefix názvu')
-			.setDesc('Text před datem v názvu souboru.')
+			.setName(t('prefixName'))
+			.setDesc(t('prefixDesc'))
 			.addText((text) =>
 				text
 					.setPlaceholder('Clipping ')
@@ -178,6 +228,20 @@ class ClippingNoteSettingTab extends obsidian.PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.prefix = value;
 						await this.plugin.saveSettings();
+					})
+			);
+
+		new obsidian.Setting(containerEl)
+			.setName(t('languageName'))
+			.setDesc(t('languageDesc'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.language === 'cs')
+					.onChange(async (value) => {
+						this.plugin.settings.language = value ? 'cs' : 'en';
+						await this.plugin.saveSettings();
+						// Re-render the tab so the visible labels update immediately.
+						this.display();
 					})
 			);
 	}
