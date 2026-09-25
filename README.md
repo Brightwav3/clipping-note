@@ -57,6 +57,10 @@ In **Settings → Clipping Note**:
 - Requires Obsidian **0.15.3** or newer.
 - Works on **desktop and mobile** (`isDesktopOnly: false`).
 
+## Support
+
+If this saved you time, you can [buy me a coffee ☕](https://buymeacoffee.com/brightwave).
+
 ## License
 
 [MIT](LICENSE) © 2026 Šimon Zelenka
